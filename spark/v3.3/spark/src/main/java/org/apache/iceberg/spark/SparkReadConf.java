@@ -19,6 +19,8 @@
 package org.apache.iceberg.spark;
 
 import java.util.Map;
+import java.util.Optional;
+import org.apache.iceberg.StreamingOverwriteSnapshotReadMode;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.exceptions.ValidationException;
@@ -132,12 +134,33 @@ public class SparkReadConf {
         .parse();
   }
 
-  public boolean streamingSkipOverwriteSnapshots() {
+  private boolean streamingSkipOverwriteSnapshots() {
     return confParser
         .booleanConf()
         .option(SparkReadOptions.STREAMING_SKIP_OVERWRITE_SNAPSHOTS)
         .defaultValue(SparkReadOptions.STREAMING_SKIP_OVERWRITE_SNAPSHOTS_DEFAULT)
         .parse();
+  }
+
+  /**
+   * Returns the streaming reade-mode for snapshots of type overwrite. In the process first checks
+   * the option 'streaming-overwrite-snapshots-read-mode', and if it is not set defaults to using
+   * the older 'streaming-skip-overwrite-snapshots' modeling only SKIP and BREAK operations, with
+   * BREAK being the default
+   */
+  public StreamingOverwriteSnapshotReadMode streamingOverwriteSnapshotsReadMode() {
+    Optional<StreamingOverwriteSnapshotReadMode> mainConf =
+        Optional.ofNullable(
+                confParser
+                    .stringConf()
+                    .option(SparkReadOptions.STREAMING_OVERWRITE_SNAPSHOTS_READ_MODE)
+                    .parseOptional())
+            .map(StreamingOverwriteSnapshotReadMode::fromName);
+    StreamingOverwriteSnapshotReadMode legacyConf =
+        streamingSkipOverwriteSnapshots()
+            ? StreamingOverwriteSnapshotReadMode.SKIP
+            : StreamingOverwriteSnapshotReadMode.BREAK;
+    return mainConf.orElse(legacyConf);
   }
 
   public boolean parquetVectorizationEnabled() {
@@ -239,7 +262,7 @@ public class SparkReadConf {
         .parse();
   }
 
-  public Long streamFromTimestamp() {
+  public long streamFromTimestamp() {
     return confParser
         .longConf()
         .option(SparkReadOptions.STREAM_FROM_TIMESTAMP)
@@ -253,6 +276,22 @@ public class SparkReadConf {
 
   public Long endTimestamp() {
     return confParser.longConf().option(SparkReadOptions.END_TIMESTAMP).parseOptional();
+  }
+
+  public int maxFilesPerMicroBatch() {
+    return confParser
+        .intConf()
+        .option(SparkReadOptions.STREAMING_MAX_FILES_PER_MICRO_BATCH)
+        .defaultValue(Integer.MAX_VALUE)
+        .parse();
+  }
+
+  public int maxRecordsPerMicroBatch() {
+    return confParser
+        .intConf()
+        .option(SparkReadOptions.STREAMING_MAX_ROWS_PER_MICRO_BATCH)
+        .defaultValue(Integer.MAX_VALUE)
+        .parse();
   }
 
   public boolean preserveDataGrouping() {
